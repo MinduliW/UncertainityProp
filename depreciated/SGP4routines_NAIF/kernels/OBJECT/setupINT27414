@@ -1,0 +1,21 @@
+\begindata
+INPUT_DATA_TYPE   = 'STATES'  
+OUTPUT_SPK_TYPE   = 9  
+OBJECT_ID        =-127414  
+OBJECT_NAME        = 'INT27414'  
+CENTER_ID        =399  
+CENTER_NAME        = 'Earth'  
+REF_FRAME_NAME        = 'J2000'  
+PRODUCER_ID       = 'arma'  
+TIME_WRAPPER = '# JD UTC'   
+DATA_ORDER        = 'EPOCH X Y Z VX VY VZ'  
+INPUT_DATA_UNITS  = ('ANGLES=DEGREES' 'DISTANCES=km')  
+DATA_DELIMITER    = ' '  
+LINES_PER_RECORD  = 1  
+LEAPSECONDS_FILE  = 'naif0011.tls'  
+PCK_FILE          = 'gm_de431.tpc'  
+SEGMENT_ID    = 'INT27414'  
+INPUT_DATA_FILE   = 'INT27414.int'  
+OUTPUT_SPK_FILE   = 'INT27414.bsp'  
+POLYNOM_DEGREE          = 9  
+\begintext  

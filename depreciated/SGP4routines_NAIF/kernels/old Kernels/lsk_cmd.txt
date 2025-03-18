@@ -1,0 +1,6 @@
+;
+;  My setup file:
+;
+LOAD naif0010.tls;
+DEFINE QUIT EXIT;
+;

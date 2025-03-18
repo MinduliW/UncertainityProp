@@ -1,0 +1,200 @@
+%% nonlinear index comparison
+clear,clc, close all;
+
+% Note: this is phasing 
+% TO DO: solve a standard convex problem using this
+addpath('Edelbaum');
+addpath('Dynamics');
+addpath('Utility');
+addpath('SGP4routines_NAIF');
+
+addmosek;
+cspice_furnsh('SGP4routines_NAIF/kernelmac.txt')
+
+%ppLEO;
+ppGeo; 
+
+[rr, vv] = CoordConv.po2pv([a0,  0.06, deg2rad(0.001),  deg2rad(5), ...
+    deg2rad(5), deg2rad(5)],param.mu);
+
+% variance 
+r_var = 1e3/param.LU ;
+v_var = 1/param.LU*param.TU; 
+
+CartX(1,:) = [rr;vv];
+
+
+% orbital period initial
+periodInit = 2*pi*sqrt(a0^3/param.mu);
+param.t0 = 0; 
+param.tf = 15*periodInit;
+paramArray = createparamArray(param);
+
+dxCartMax = 3*[r_var, r_var,r_var, v_var , v_var, v_var];
+
+
+MEEX0 =  CoordConv.vec2mee(CartX(1:3),CartX(4:6),param.mu);
+GEqoeX0 = RV2GEq(CartX(1:3),CartX(4:6),param.mu, param.J2,param.Re);
+CEqoeX0 = RV2CEq(CartX(1:3),CartX(4:6),param.mu, param.J2,param.Re);
+kepx0   = vec2orbElem(CartX(1:3),CartX(4:6),param.mu);
+
+
+%% Covariance method 
+mex -v -R2018a -I/usr/local/include -L/usr/local/lib cpp/testcartconv.cpp -ldace -lgsl -lfmt -lcblas
+
+for i = 1: 100
+
+
+    %valkep(i,:) = kepX - kepx0;
+
+
+    val(i,:)  =  1/3*randn(1,6);
+    valMEE(i,:)  =  1/3*randn(1,6);
+    valGeqOE(i,:) = 1/3*randn(1,6);
+    valCeqOE(i,:) = 1/3*randn(1,6);
+    valkep(i,:)   = 1/3*randn(1,6);
+
+
+
+    [fxe, fx0 , nlc,fxeMEE, fx0MEE, nlcMEE, fxeGeq, fx0Geq, nlcGeq,...
+       fxeCeq, fx0Ceq, nlcCeq, fxeKep, fx0Kep, nlcKep]= ...
+        testcartconv(paramArray, CartX , val(i,:), valMEE(i,:), valGeqOE(i,:), valCeqOE(i,:),  valkep(i,:));
+
+    dCartXX(i,:) = fxe- fx0;
+    dMEEXX(i,:) = fxeMEE - fx0MEE;
+    dGEqoeXX(i,:) = fxeGeq - fx0Geq;
+    dCEqoeXX(i,:) = fxeCeq - fx0Ceq;
+    dKepXX(i,:) = fxeKep - fx0Kep;
+end
+
+
+%% Point cloud method 
+mex -v -R2018a -I/usr/local/include -L/usr/local/lib cpp/testcartnlc.cpp -ldace -lgsl -lfmt -lcblas
+
+
+[fx02, STM0,fx0MEE, STM0MEE, fx0Geq, STM0Geq, fx0Ceq, STM0Ceq, fx0kep, STM0kep] = testcartnlc(paramArray, CartX,MEEX0, GEqoeX0, CEqoeX0, kepx0);
+
+for i = 1: 100
+
+    val(i,:) = [randn(1,3), 0,0,0]'.*[r_var*ones(3,1); zeros(3,1)] + ...
+        [0,0,0,randn(1,3)]'.*[zeros(3,1); v_var*ones(3,1)];
+
+    CartXnew = CartX+val(i,:); 
+    MEEX =  CoordConv.vec2mee(CartXnew(1:3),CartXnew(4:6),param.mu);
+    GEqoeX = RV2GEq(CartXnew(1:3),CartXnew(4:6),param.mu, param.J2,param.Re);
+    CEqoeX = RV2CEq(CartXnew(1:3),CartXnew(4:6),param.mu, param.J2,param.Re);
+    kepX  = vec2orbElem(CartXnew(1:3),CartXnew(4:6),param.mu);
+
+
+    valMEE(i,:)  =  1/3*randn(1,6);
+    valGeqOE(i,:) = 1/3*randn(1,6);
+    valCeqOE(i,:) = 1/3*randn(1,6);
+    valkep(i,:)   = 1/3*randn(1,6);
+
+
+
+    
+
+    
+    [fxe2, STMe,fxeMEE, STMeMEE, fxeGeq, STMeGeq,fxeCeq, STMeCeq , fxekep, STMekep] = testcartnlc(paramArray, CartXnew,MEEX,GEqoeX, CEqoeX, kepX);
+
+    nuCart(i) = norm(STMe-STM0,'fro')/norm(STM0,'fro');
+    nuMEE(i) = norm(STMeMEE-STM0MEE,'fro')/norm(STM0MEE,'fro');
+    nuGeq(i) = norm(STMeGeq-STM0Geq,'fro')/norm(STM0Geq,'fro');
+    nuCeq(i) = norm(STMeCeq-STM0Ceq,'fro')/norm(STM0Ceq,'fro');
+    nuKep(i) = norm(STMekep-STM0kep,'fro')/norm(STM0kep,'fro');
+
+    dCartXXnlc(i,:) = fxe2 - fx02; 
+    dMEEXXnlc(i,:) = fxeMEE - fx0MEE;
+    dGeqXXnlc(i,:) = fxeGeq - fx0Geq;
+    dCeqXXnlc(i,:) = fxeCeq - fx0Ceq;
+    dkepXXnlc(i,:) = fxekep - fx0kep;
+    
+end
+
+%2.464089964881659
+
+%% 
+figure;
+subplot(1,2,1);
+loglog(nlc, 'o'); hold on; 
+loglog(nlcMEE, 'o');
+loglog(nlcGeq, 'o');
+loglog(nlcCeq, 'o');
+p = loglog(nlcKep, 'o');
+ylim([1e-7,1e1])
+plot_latex(p, '', '\eta','', 'Nonlinearity index from Covariance' ,{'Cartesian', 'MEE', 'Geqoe', 'Ceqoe', 'Keplerian'});
+
+
+
+subplot(1,2,2); 
+loglog(max(nuCart), 'o');hold on; 
+loglog(max(nuMEE), 'o');
+loglog(max(nuGeq), 'o');
+loglog(max(nuGeq), 'o');
+p = loglog(max(nuKep), 'o');
+ylim([1e-7,1e1])
+plot_latex(p, '', '\eta','', 'Nonlinearity index from point cloud analysis' ,{'Cartesian', 'MEE', 'Geqoe', 'Ceqoe', 'Keplerian'});
+
+
+
+
+%% 
+figure; 
+subplot(1,5,1);hold on; 
+p = plot(dCartXXnlc(:,1), dCartXXnlc(:,2), 'r.');
+plot(val(:,1), val(:,2), 'k.');
+plot_latex(p, 'X[Re]', 'Y[re]','', 'Cartesian' ,{'Covariance prop','Initial' });
+
+subplot(1,5,2);hold on; 
+p = plot(dMEEXXnlc(:,1), dMEEXXnlc(:,6), 'r.');
+plot(valMEE(:,1), valMEE(:,6), 'k.');
+plot_latex(p, 'p [Re]', 'L[rad]','', 'Modified Equinoctials' ,{});
+
+subplot(1,5,3);hold on; 
+p = plot(dGeqXXnlc(:,1), dGeqXXnlc(:,4), 'r.');
+plot(valGeqOE(:,1), valGeqOE(:,4), 'k.');
+plot_latex(p, '\nu', 'L[rad]','', 'GEqoOE' ,{});
+
+subplot(1,5,4);hold on; 
+p = plot(dCeqXXnlc(:,1), dCeqXXnlc(:,4), 'r.');
+plot(valCeqOE(:,1), valCeqOE(:,4), 'k.');
+plot_latex(p, '\nu', 'L[rad]','', 'CEqoOE' ,{});
+
+
+subplot(1,5,5); hold on; 
+p = plot(dkepXXnlc(:,1), wrapToPi(dkepXXnlc(:,4)+dkepXXnlc(:,5)+dkepXXnlc(:,6)), 'r.');
+plot(valkep(:,1),  wrapToPi(valkep(:,4)+valkep(:,5)+valkep(:,6)), 'k.');
+plot_latex(p, 'a[Re]', 'L[rad]','', 'Kepler' ,{});
+
+
+ 
+figure; 
+subplot(1,5,1);hold on; 
+p = plot(dCartXX(:,1), dCartXX(:,2), 'b.');
+plot(val(:,1), val(:,2), 'k.');
+plot_latex(p, 'X[Re]', 'Y[re]','', 'Cartesian' ,{ 'Cloud prop', 'Initial' });
+
+subplot(1,5,2);hold on; 
+p = plot(dMEEXX(:,1), dMEEXX(:,6), 'b.');
+plot(valMEE(:,1), valMEE(:,6), 'k.');
+plot_latex(p, 'p [Re]', 'L[rad]','', 'Modified Equinoctials' ,{});
+
+subplot(1,5,3);hold on; 
+p = plot(dGEqoeXX(:,1), dGEqoeXX(:,4), 'b.');
+plot(valGeqOE(:,1), valGeqOE(:,4), 'k.');
+plot_latex(p, '\nu', 'L[rad]','', 'GEqoOE' ,{});
+
+subplot(1,5,4);hold on; 
+p = plot(dCEqoeXX(:,1), dCEqoeXX(:,4), 'b.');
+plot(valCeqOE(:,1), valCeqOE(:,4), 'k.');
+plot_latex(p, '\nu', 'L[rad]','', 'CEqoOE' ,{});
+
+
+subplot(1,5,5); hold on; 
+p = plot(dKepXX(:,1), wrapToPi(dKepXX(:,4)+dKepXX(:,5)+dKepXX(:,6)), 'b.');
+plot(valkep(:,1),  wrapToPi(valkep(:,4)+valkep(:,5)+valkep(:,6)), 'k.');
+plot_latex(p, 'a[Re]', 'L[rad]','', 'Kepler' ,{});
+
+
+

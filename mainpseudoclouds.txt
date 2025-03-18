@@ -1,0 +1,96 @@
+Uncertainity propagation Pseudocode. 
+
+ Orbital elements of the GEO 
+    - altitude = 35000 km, e = 0.06, inc = 0.001 deg, RAAN = 5 deg, AOP = 5 deg, TA = 5 deg. 
+    - Convert to cartesian to generate CartX.
+
+    - coordinates used are scaled, such that mu = 1. 
+
+
+ - so initial errors -> 
+    r_var = 1e3/Re = 1.567855942887398e-04
+    v_var = 1/Re*TU = 1.264963522926364e-04 
+
+- propagate for 15 orbits. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Covariance based propagation 
+_____________________________
+
+- Compile the MEX - function name (CovarianceProp.cpp) 
+    - Described in the CloudProp.txt file. 
+
+- Convert the initial Cartesian coordinate to other coordinates. 
+    MEEX0 =  ec2mee(CartX);
+    GEqoeX0 = RV2GEq(CartX);
+    CEqoeX0 = RV2CEq(CartX);
+    kepx0   = vec2orbElem(CartX);
+
+- Propagate the initial cordinate to get the unperturbed propagated states and STMS. 
+    [fx02, STM0,fx0MEE, STM0MEE, fx0Geq, STM0Geq, fx0Ceq, STM0Ceq, fx0kep, STM0kep] = CloudProp(CartX,MEEX0, GEqoeX0, CEqoeX0, kepx0);
+
+
+- For i = 1:100 samples: 
+    - Calculate the variation in cartesian under a normal distribution with sigma given by the initial errors. 
+        var =   randn(1,6)*[r_var*ones(3,1); v_var*ones(3,1)];
+
+    - Compute the perturbed initial coordinates. 
+        CartXnew = CartX+val(i,:); 
+        MEEX =  CoordConv.vec2mee(CartXnew);
+        GEqoeX = RV2GEq(CartXnew);
+        CEqoeX = RV2CEq(CartXnew);
+        kepX  = vec2orbElem(CartXnew);
+
+    - Propagate the perturbed coordinates. 
+          [fxe2, STMe,fxeMEE, STMeMEE, fxeGeq, STMeGeq,fxeCeq, STMeCeq , fxekep, STMekep] = CloudProp(CartXnew,MEEX,GEqoeX, CEqoeX, kepX);
+    
+    - Calculate the nonlinearity index based on the STMS.
+        nuCart(i) = norm(STMe-STM0,'fro')/norm(STM0,'fro');
+        nuMEE(i) = norm(STMeMEE-STM0MEE,'fro')/norm(STM0MEE,'fro');
+        nuGeq(i) = norm(STMeGeq-STM0Geq,'fro')/norm(STM0Geq,'fro');
+        nuCeq(i) = norm(STMeCeq-STM0Ceq,'fro')/norm(STM0Ceq,'fro');
+        nuKep(i) = norm(STMekep-STM0kep,'fro')/norm(STM0kep,'fro');
+    
+    - calculate propagated state errors 
+        dCartXXnlc(i,:) = fxe2 - fx02; 
+        dMEEXXnlc(i,:) = fxeMEE - fx0MEE;
+        dGeqXXnlc(i,:) = fxeGeq - fx0Geq;
+        dCeqXXnlc(i,:) = fxeCeq - fx0Ceq;
+        dkepXXnlc(i,:) = fxekep - fx0kep;
+
+- Calculate nonlinearity index in each coordinate as maximum of the nonlinearity indicies of the samples. 
+
+- Plot the nonlinearity index, and also the initial and propagated errors. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+[fxeCart, STMeCart, fxeMEE , STMeMEE] = CloudProp(CartX, MEEX)
+
+% Just describing the process for Cart and MEE, other coordinates are the same as MEE. 
+
+
+ - For cartesian 
+        Set the DA variables 
+            x0 = CartX + DA; 
+
+        Propagate: 
+            fx = RK78(x0, tf=15orbits, @DynamicsCart)
+
+        Get the perturbed state
+            fxeCart = cons(fx);
+
+        Calculate the STM
+            STMeCart = fx.linear();
+
+- For MEE/other coordinates 
+        Set the DA variables 
+            x0 = MEEX + DA; 
+
+        Propagate in MEE. 
+            fxMEE = RK78(MEEX, tf= 15 orbits, @DynamicsMEE)
+
+        Get the perturbed state
+            fxeMEE = cons(fxMEE);
+
+        Calculate the STM
+            STMeMEE = fxeMEE.linear();

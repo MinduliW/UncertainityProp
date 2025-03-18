@@ -1,0 +1,1 @@
+function [tProp,x0cartOsc,coemean,xguess2] =  fprop()

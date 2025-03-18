@@ -1,0 +1,49 @@
+\begindata
+  PATH_VALUES  = ( 
+  		     '/Users/minduli/Astroscale_ADR/Main/SGP4routines_NAIF'
+  		  )
+  PATH_SYMBOLS = ( 'A' )
+  
+  KERNELS_TO_LOAD = (
+                     '$A/kernels/NAIF0012.tls'
+                     '$A/kernels/pck00010.tpc'
+                     '$A/kernels/gm_de431.tpc'
+                     '$A/kernels/EARTH_000101_220307_211213.bpc'
+                     '$A/kernels/de432s.bsp'
+                     '$A/kernels/ECLIPJ2000_DE405.tf',
+                     '$A/SPK33492.bsp',
+                     '$A/SPK33500.bsp',
+                     '$A/SPK39766.bsp'
+                    )                    
+
+\begintext
+
+
+KERNELS:
+1) Leap Seconds Kernels (LSK)
+      a) Text LSK (.tls)
+            - naif0011.tls
+
+2) Planetary Constant Kernels (PCK) 
+      a) Binary PCK (.bpc)
+            --> Earth high-precision
+                  - earth_000101_150929_150708.bpc (from January 01 2000 to September 29 2015)        
+
+            --> Earth low-precision
+                  - earth_070425_370426_predict.bpc
+
+      b) Text PCK (.tpc)
+            - gm_de431.tpc
+            - pck00010.tpc
+
+3) Kernels for ephemeris of vehicles, planets, satellites, comets, asteroids (SPK)
+      a) Binary SPK (.bsp)
+            - de432s.bsp
+
+4) Frame Kernels (FK)
+      a) Text FK (.tf) 
+            - MOD.tf    --> Mean Of Date
+            - TOD.tf    --> True Of Date
+            - ECLIPJ2000_DE405.tf --> Ecliptic J2000 frame
+
+

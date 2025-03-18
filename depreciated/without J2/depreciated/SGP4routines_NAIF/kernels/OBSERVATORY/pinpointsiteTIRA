@@ -1,0 +1,7 @@
+\begindata
+SITES        = ('TIRA') 
+TIRA_CENTER = 399 
+TIRA_FRAME = 'ITRF93' 
+TIRA_IDCODE =30000031 
+TIRA_LATLON =(50.6165,7.1295,1) 
+\begintext 

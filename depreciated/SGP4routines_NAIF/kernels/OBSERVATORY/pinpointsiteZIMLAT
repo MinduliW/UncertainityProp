@@ -1,0 +1,7 @@
+\begindata
+SITES        = ('ZIMLAT') 
+ZIMLAT_CENTER = 399 
+ZIMLAT_FRAME = 'ITRF93' 
+ZIMLAT_IDCODE =100000026 
+ZIMLAT_LATLON =(46.9,7.5,1) 
+\begintext 

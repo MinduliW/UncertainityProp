@@ -1,0 +1,131 @@
+Uncertainity propagation Pseudocode. 
+
+ Orbital elements of the GEO 
+    - altitude = 35000 km, e = 0.06, inc = 0.001 deg, RAAN = 5 deg, AOP = 5 deg, TA = 5 deg. 
+    - Convert to cartesian to generate CartX.
+
+    - coordinates used are scaled, such that mu = 1. 
+
+
+ - so initial errors -> 
+    r_var = 1e3/Re = 1.567855942887398e-04
+    v_var = 1/Re*TU = 1.264963522926364e-04 
+
+- propagate for 15 orbits. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Covariance based propagation 
+_____________________________
+
+- Compile the MEX - function name (CovarianceProp.cpp) 
+    - Described in the CovarianceProp.txt file. 
+
+- For 100 samples: 
+    - Calculate var = 1/3*rand(1,6);
+
+    - Now run the CovarianceProp cpp function, which outputs, in each of the 
+      coordinates, the propagated state for the perturbed initial state
+      propagated state for the unperturbed initial state (overkill) and the nonlinearity index. 
+        [fxeC, fx0C, nliC , fxeMEE, fx0MEE, nlcMEE...] = CovarianceProp(CartX, var)
+
+    - Get the propagated errors in each coordinate. 
+        dCartX = fxeC - fx0C; 
+        dMEEX  = fxeMEE - fx0MEE;
+        dGeqX  = fxeGeq - fx0Geq;
+        dCeqX  = fxeCeq - fx0Ceq;
+        dKepX  = fxeKep - fx0Kep;
+
+   - Plot the nonlinearity index, and also the initial and propagated errors. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+[fxeC, fx0C, nliC , fxeMEE, fx0MEE, nlcMEE] = CovarianceProp(CartX, var)
+
+% Just describing the process for Cart and MEE, other coordinates are the same as MEE. 
+
+ - Set the DA variables 
+        x0 = CartX + DA; 
+
+ - For cartesian 
+        Go to the reference frame where the covariance is diagonal. 
+            Cartesc = convertU(x0); 
+
+        Propagate: 
+            fx = RK78(Cartesc, tf=15orbits, @DynamicsCart)
+
+        Get the perturbed state
+            fxeC = fx.eval(var)
+
+        Get the unperturbed state
+            fx0C = fx.eval(DA = 0)
+
+        Calculate the nonlinearity index 
+            nliC = calcnonlinearindexLoads(fx) -> function discussed below. 
+
+- For MEE/other coordinates 
+        Convert x0 to MEE
+            x0t = eci2MEE(x0);
+
+        Go to the reference frame where the covariance is diagonal. 
+            MEEesc = convertU(x0t); 
+
+        Propagate in MEE. 
+            fxMEE = RK78(MEEesc, tf= 15 orbits, @DynamicsMEE)
+
+        Get the perturbed state
+            fxeMEE = fxMEE.eval(var)
+
+        Get the unperturbed state
+            fx0MEE = fxMEE.eval(DA = 0)
+
+        Calculate the nonlinearity index
+            nlcMEE = calcnonlinearindexLoads(fxMEE) -> function discussed below. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+nli = calcnonlinearindexLoads(fx)
+% function calculates the nonlinearity index. 
+% dxmax is the maximum values of the pertubation, from the normal distribution. 
+% It is needed because dxmax is not one - unless the problem is scaled to make it so. 
+
+ 1. calculate the jacobian and jbar norm
+        Jacobian  = fx.deriv(); 
+        Jbar      = fx.linear(); 
+        normJbar2 = sum(sum(Jbar*Jbar));
+
+ 2. calculate the squared sum of the second order terms in the Jacobian *dxmax. 
+        b = sum(sum( Jacobian.deriv()*Jacobian.deriv())) -> this is a three loop iteration of course.
+
+ 3. Lastly calculate the nonlinearity index.
+        nli = sqrt(b)/sqrt(normJbar2)
+
+ 4. Return nli. 
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+xsc = convertU(x0t)
+
+ 1. Set the cartesian covariance matrix. 
+        CovCar = [1e3/LU 0 0 0 0 0 
+                    0   1e3/LU 0 0 0 0
+                    0    0 1e3/LU 0 0 0
+                    0 0 0 1/LU*TU 0 0 
+                    0 0 0 0 1/LU*TU 0 
+                    0 0 0 0 0 1/LU*TU];
+
+2. Get the STM of the transform from Cart to the new coordinate.
+        STM = x0t.linear(); 
+
+3. Get the new covariance.
+      Cov = STM*CovCar*STM.transpose(); 
+
+4. Get the new DA. 
+       x_Eig_DA = 3*sqrt(EigVal)*EigV; 
+
+5. Map to the domain where the covariance is diagonal
+       xsc = x0t.cons() + x_Eig_DA; 
+
+6. Return xsc. 
+       
+                

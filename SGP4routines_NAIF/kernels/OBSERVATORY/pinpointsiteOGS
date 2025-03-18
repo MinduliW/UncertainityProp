@@ -1,0 +1,7 @@
+\begindata
+SITES        = ('TFRM') 
+TFRM_CENTER = 399 
+TFRM_FRAME = 'ITRF93' 
+TFRM_IDCODE =30000035 
+TFRM_LATLON =(42.0516,0.7293,1.622) 
+\begintext 

@@ -1,0 +1,94 @@
+%% nonlinear index comparison
+clear,clc, close all;
+
+% Note: this is phasing 
+% TO DO: solve a standard convex problem using this
+addpath('Edelbaum');
+addpath('Dynamics');
+addpath('Utility');
+addpath('SGP4routines_NAIF');
+
+
+
+addmosek;
+cspice_furnsh('SGP4routines_NAIF/kernelmac.txt')
+
+
+ppGeo;
+%[rr, vv] = CoordConv.po2pv([a0, e0, inc0, RAAN0_t0,0.0001,0.001], param.mu);
+[rr, vv] = CoordConv.po2pv([a0, 0.000001, 0.000001, 0.001,0.0001,0.001],param.mu);
+x0cartOsc = [rr;vv];
+
+nsamples = 100;
+
+% variance 
+r_var =  1e2/param.LU ;
+v_var =  0.1/param.LU*param.TU; 
+
+CartX = [];
+
+CartX(1,:) =  x0cartOsc';
+
+mex -v -R2018a -I/usr/local/include -L/usr/local/lib cpp/propmain2.cpp -ldace -lgsl -lfmt -lcblas
+
+% orbital period initial
+periodInit = 2*pi*sqrt(a0^3/param.mu);
+param.t0 = 0; 
+param.tf = 15*periodInit;
+param.nu = 1;
+param.method = 2; 
+
+param.coordSys = 1; 
+paramArray = createparamArray(param,nsamples+1);
+
+
+for i = 2:nsamples+1
+    val = [randn(1,3),0,0,0]'.*[r_var*ones(3,1); zeros(3,1)] + [0,0,0,randn(1,3)]'.*[zeros(3,1); v_var*ones(3,1)];
+    dCartX(i,:) =  val'; 
+    [fxe, fx0 , STM0, STMe, fxMEE, fx0MEE, STM0MEE, STMeMEE,...
+        fxCeq, fx0Ceq, STM0Ceq, STMeCeq,  fxGeq, fx0Geq, STM0Geq, STMeGeq, 
+     fxKep fx0Kep, STM0Kep, STMeKep]= propmain2(paramArray, CartX, dCartX(i,:));
+    dCartXX(i,:) = fxe - fx0;
+
+    dMEEXX(i,:) = fxMEE - fx0MEE;
+
+    nlc(i) = norm(STMe - STM0)/norm(STM0); 
+    nlcMEE(i) = norm(STMeMEE - STM0MEE)/norm(STM0MEE); 
+
+end
+
+
+figure; 
+
+subplot(1,5,1); hold on; 
+for i = 1:nsamples+1
+    p = plot(dCartXX(:,1), dCartXX(:,2), 'r.');
+end
+plot(dCartX(:,1), dCartX(:,2), 'k.');
+plot_latex(p, 'X[Re]', 'Y[re]','', 'Cartesian' ,{});
+
+
+subplot(1,5,2); hold on; 
+for i = 1:nsamples+1
+    p = plot(dMEEXX(:,1), dMEEXX(:,6), 'r.');
+end
+%plot(dCartX(:,1), dCartX(:,6), 'k.');
+plot_latex(p, 'p [Re]', 'L[rad]','', 'MEE' ,{});
+
+
+
+
+
+
+figure; 
+
+subplot(1,5,1); hold on; 
+plot(nlc)
+plot_latex(p, 'X[Re]', 'Y[re]','', 'Cartesian' ,{});
+
+subplot(1,5,2); hold on; 
+plot(nlcMEE);
+
+plot_latex(p, 'sample', 'nonlinear index','', 'MEE' ,{});
+
+
