@@ -1,6 +1,7 @@
 %Coordinate conversions
 classdef CoordConv
     methods (Static)
+
         function MEEParameters = kepler2MEOE(Object)
             % input: A struct or array with keplerian orbital elements
             % output: A vector of MEE elements.
@@ -56,6 +57,239 @@ classdef CoordConv
             
             
         end
+
+        function [a,e,INC,AOP,RAAN,MA,TA] = RV2OE(R,V,mu)
+            %--------------------------------------------------------------------------
+            %   Converts R and V to classical orbital elements
+            %--------------------------------------------------------------------------
+            %   Form:
+            %   [a,e,INC,AOP,RAAN,MA,TA] = RV2OE( R, V, mu)
+            %--------------------------------------------------------------------------
+            %
+            %   ------
+            %   Inputs
+            %   ------
+            %   R               (1,3) Position vector
+            %   V               (1,3) Velocity vector
+            %   mu                    Gravitational parameter
+            %
+            %   -------
+            %   Outputs
+            %   -------
+            %   X               (1,6) Elements vector [a,e,INC,AOP,RAAN,MA,TA]
+            %
+            % Magnitude of vectors (lowercase)
+            r = norm(R);    v = norm(V);
+            % Calculate h and e
+            H = cross(R,V);     % angular momentum
+            h = norm(H);
+            E = -R/r - 1/mu*cross(H,V);   % eccentricity
+            e = norm(E);
+            % Perifocal frame
+            u1 = E/e;
+            u3 = H/h;
+            u2 = cross(u3,u1);
+            % Inertial frame
+            i = [1 0 0];
+            j = [0 1 0];
+            k = [0 0 1];
+            uln = cross(k,u3);    % node line
+            % Angles from perifocal frame
+            INC = acos(dot(u3,k));    % inclination
+            RAAN = atan2(dot(uln,j),dot(uln,i));    % ascending node
+            if RAAN < 0
+                RAAN = RAAN + 2*pi;
+            end
+            AOP = atan2(dot(-u2,uln),dot(uln,u1));  % argument of perigee
+            if AOP < 0
+                AOP = AOP + 2*pi;
+            end
+            TA = atan2(dot(R,u2),dot(R,u1));    % true anomaly
+            if TA < 0
+                TA = TA + 2*pi;
+            end
+            u = 2*atan(sqrt((1-e)/(1+e))*tan(TA/2));    % eccentric anomaly
+            MA = u - e*sin(u);  % mean anomaly (Kepler's eq.)
+            % Add semimajor axis from energy equation
+            a = r/(2 - v^2*r/mu);
+        end
+        function X = RV2CEq(R,V,mu, J2, Re)
+            %--------------------------------------------------------------------------
+            %   Converts R and V to Equinoctial elements
+            %--------------------------------------------------------------------------
+            %   Form:
+            %   eq = RV2GEq( R, V, mu ,U)
+            %--------------------------------------------------------------------------
+            %
+            %   ------
+            %   Inputs
+            %   ------
+            %   R               (1,3) Position vector
+            %   V               (1,3) Velocity vector
+            %   mu                    Gravitational parameter
+
+            %   -------
+            %   Outputs
+            %   -------
+            %   X               (1,6) Elements vector [nu,p1,p2,varL,q1,Q2]
+            %
+            %--------------------------------------------------------------------------
+            %   References:  Baù, G., Hernando-Ayuso, J. and Bombardelli, C., 2021.
+            %   "A generalization of the equinoctial orbital elements"
+            %   Celestial Mechanics and Dynamical Astronomy, 133(11), pp.1-29.
+            %--------------------------------------------------------------------------
+
+
+            %% Calculate GEqOE from R,V
+            [~,~,INC,~,RAAN,~,~] = CoordConv.RV2OE(R,V,mu);  % obtain RAAN and INC
+            % State parameters
+            r = norm(R);
+            v = norm(V);
+            h = norm(cross(R,V));           % angular momentum module
+            r_dot = dot(R,V)/r;             % radial velocity
+            % Calculate energy
+            epsK = 1/2*v^2 - mu/r;          % Keplerian energy
+
+
+            U = 0;
+
+            eps = epsK + U;                 % total energy
+            nu = 1/mu*(-2*eps)^(3/2);       % (1)
+            % Calculate q in order to obtain equinoctial frame
+            q1 = tan(INC/2)*sin(RAAN);  % (5)
+            q2 = tan(INC/2)*cos(RAAN);  % (6)
+            % Unit vectors of equinoctial frame in inertial ref.
+            Kq = 1/(1+q1^2+q2^2);
+            ex = Kq*[1-q1^2+q2^2    ,2*q1*q2        ,-2*q1];
+            ey = Kq*[2*q1*q2        ,1+q1^2-q2^2    ,2*q2];
+            % Radial vector in inertial ref.
+            er = R/r;
+            % Obtain true longitude
+            cL = dot(er,ex);
+            sL = dot(er,ey);
+            L = atan2(sL,cL);
+            if L < 0
+                L = L + 2*pi;
+            end
+            % L = AOP + RAAN + TA;
+            % Calculate rho,c and a
+            Ueff = h^2/2/r^2 + U;   % effective potential
+            c = sqrt(2*r^2*Ueff);
+            rho = c^2/mu;
+            a = -mu/2/eps;
+            % g vector
+            p1 = (rho/r-1)*sin(L) - c*r_dot/mu*cos(L);  % (2)
+            p2 = (rho/r-1)*cos(L) + c*r_dot/mu*sin(L);  % (3)
+            % Obtain K for varL
+            w = sqrt(mu/a);
+            sK = (mu+c*w-r*r_dot^2)*sin(L) - r_dot*(c+w*r)*cos(L);
+            cK = (mu+c*w-r*r_dot^2)*cos(L) + r_dot*(c+w*r)*sin(L);
+            K = atan2(sK,cK);
+            if K < 0
+                K = K + 2*pi;
+            end
+            % Obtain generalized mean longitud varL
+            varL = K + 1/(mu+c*w)*(cK*p1-sK*p2);  % (4)
+            % GEqOE array
+            X = [nu p1 p2 varL q1 q2];
+        end
+
+        function X = RV2GEq(R,V,mu,J2, Re)
+            %--------------------------------------------------------------------------
+            %   Converts R and V to Equinoctial elements
+            %--------------------------------------------------------------------------
+            %   Form:
+            %   eq = RV2GEq( R, V, mu ,U)
+            %--------------------------------------------------------------------------
+            %
+            %   ------
+            %   Inputs
+            %   ------
+            %   R               (1,3) Position vector
+            %   V               (1,3) Velocity vector
+            %   mu                    Gravitational parameter
+            %   U               (1,1) Perurbation potential (i.e. negative disturbing
+            %                         function). For U=0 classical "alternate"
+            %                         equinoctial elements are treated.
+            %
+            %   -------
+            %   Outputs
+            %   -------
+            %   X               (1,6) Elements vector [nu,p1,p2,varL,q1,Q2]
+            %
+            %--------------------------------------------------------------------------
+            %   References:  Baù, G., Hernando-Ayuso, J. and Bombardelli, C., 2021.
+            %   "A generalization of the equinoctial orbital elements"
+            %   Celestial Mechanics and Dynamical Astronomy, 133(11), pp.1-29.
+            %--------------------------------------------------------------------------
+
+
+            %% Calculate GEqOE from R,V
+            [~,~,INC,~,RAAN,~,~] = CoordConv.RV2OE(R,V,mu);  % obtain RAAN and INC
+            % State parameters
+            r = norm(R);
+            v = norm(V);
+            h = norm(cross(R,V));           % angular momentum module
+            r_dot = dot(R,V)/r;             % radial velocity
+            % Calculate energy
+            epsK = 1/2*v^2 - mu/r;          % Keplerian energy
+
+            phi = acos(R(3)/r);
+            U = J2/2*mu/r*(Re/r)^2*(3*cos(phi)^2-1);
+
+            eps = epsK + U;                 % total energy
+            nu = 1/mu*(-2*eps)^(3/2);       % (1)
+            % Calculate q in order to obtain equinoctial frame
+            q1 = tan(INC/2)*sin(RAAN);  % (5)
+            q2 = tan(INC/2)*cos(RAAN);  % (6)
+            % Unit vectors of equinoctial frame in inertial ref.
+            Kq = 1/(1+q1^2+q2^2);
+            ex = Kq*[1-q1^2+q2^2    ,2*q1*q2        ,-2*q1];
+            ey = Kq*[2*q1*q2        ,1+q1^2-q2^2    ,2*q2];
+            % Radial vector in inertial ref.
+            er = R/r;
+            % Obtain true longitude
+            cL = dot(er,ex);
+            sL = dot(er,ey);
+            L = atan2(sL,cL);
+
+            if L < 0
+                L = L + 2*pi;
+            end
+
+
+            if R(2) <0
+                if ~(L >pi && L < 2*pi)
+                    "here"
+                end
+
+            end
+
+            % L = AOP + RAAN + TA;
+            % Calculate rho,c and a
+            Ueff = h^2/2/r^2 + U;   % effective potential
+            c = sqrt(2*r^2*Ueff);
+            rho = c^2/mu;
+            a = -mu/2/eps;
+            % g vector
+            p1 = (rho/r-1)*sin(L) - c*r_dot/mu*cos(L);  % (2)
+            p2 = (rho/r-1)*cos(L) + c*r_dot/mu*sin(L);  % (3)
+            % Obtain K for varL
+            w = sqrt(mu/a);
+            sK = (mu+c*w-r*r_dot^2)*sin(L) - r_dot*(c+w*r)*cos(L);
+            cK = (mu+c*w-r*r_dot^2)*cos(L) + r_dot*(c+w*r)*sin(L);
+            K = atan2(sK,cK);
+            if K < 0
+                K = K + 2*pi;
+            end
+            % Obtain generalized mean longitud varL
+            varL = K + 1/(mu+c*w)*(cK*p1-sK*p2);  % (4)
+            % GEqOE array
+            X = [nu p1 p2 varL q1 q2];
+        end
+
+
+
         function [rr, vv] = po2pv(PO, mu)
             
             % input: PO vector of classical orbital parameters

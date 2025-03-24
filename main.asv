@@ -1,0 +1,44 @@
+clear,clc; close all;
+
+% This is a cleaned up version of the nonlinearity index calculation.
+% What is being done:
+    % 
+
+%% Initial orbit 
+mu = 3.986005e14;%m^2/s^3
+Re = 6378.137e3; % m
+J2 =  1.08262668e-3;
+g0 = 9.80665; %m/s
+m_spacecraft = 800;
+
+% normalization of units for easier integration. 
+param.LU = Re;
+param.VU = sqrt(mu/Re);
+param.TU = param.LU/param.VU;
+param.MU = m_spacecraft;
+
+param.mu= mu/param.LU^3*param.TU^2; 
+param.Re = Re/param.LU;
+param.J2 = J2; 
+
+a0 = 350e3/param.LU + param.Re;
+
+% convert initial state to cartesian. 
+[rr, vv] = CoordConv.po2pv([a0,  0.0064, deg2rad(0.01),  deg2rad(5), ...
+    deg2rad(5), deg2rad(5)],param.mu);
+
+CartX(1,:) = [rr;vv];
+
+% orbital period initial
+periodInit = 2*pi*sqrt(a0^3/param.mu);
+param.t0 = 0; 
+param.tf = 15*periodInit;
+
+paramArray = [param.mu, param.J2, param.Re, param.tf];
+
+% Get the 
+%% Propagate nominal trajectory 
+mex -v -R2018a -I/usr/local/include -L/usr/local/lib cpp/CloudProp.cpp -ldace 
+
+[fx02, STM0,fx0MEE, STM0MEE, fx0Geq, STM0Geq, fx0Ceq, STM0Ceq, fx0kep, STM0kep] = ...
+    CloudProp(paramArray, CartX,MEEX0, GEqoeX0, CEqoeX0, kepx0);
